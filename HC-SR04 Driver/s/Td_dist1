@@ -1,0 +1,19 @@
+.extern Ini_dist
+.extern Mide_dist
+
+.data
+BIEN: .asciz "SEÑAL DETECTADA"
+MAL: .asciz "ERROR: SEÑAL NO DETECTADA"
+
+.globl _start
+.text
+_start:
+BL ST_Init
+BL Ini_dist
+BL Mide_dist
+CMP R0, #0
+LDREQ R0, =MAL
+LDRNE R0, =BIEN
+SWI 0X02
+
+SWI 0X11

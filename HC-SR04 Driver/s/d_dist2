@@ -1,0 +1,74 @@
+.extern prog_gpio
+.extern valor_terminal
+.extern espera_valor
+.extern ST_Delay
+.extern ST_Read
+
+.equ TERMINAL_TRIG, 14 @numero de terminal
+.equ TERMINAL_ECHO, 15 @numero de terminal
+.equ TIME_HIGH, 15 @microsegundos
+
+.globl Ini_dist
+.globl Mide_dist
+
+.text
+Ini_dist:
+@prepara el dispositivo para empezar a tomar medidas, indicando a cada terminal el modo de comportamiento. No recibe parametros ni retorna.
+SUB SP, SP, #4
+STR LR, [SP]
+MOV R0, #TERMINAL_TRIG
+MOV R1, #1
+BL prog_gpio
+MOV R0, #TERMINAL_ECHO
+MOV R1, #0
+BL prog_gpio
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR
+
+Mide_dist:
+@no recibe parametros, y retorna en r0 un booleano indicando si se ha podido tomar o no la medida, y en r1 la medida o "0" si no se pudo tomar.
+STMDB SP!, {R4-R5, LR}
+MOV R0, #8
+MOV R1, #1
+BL valor_terminal
+MOV R0, #8
+MOV R1, #1
+MOV R0, #TIME_HIGH
+BL ST_Delay
+MOV R0, #8
+MOV R1, #0
+BL valor_terminal
+
+MOV R0, #15
+MOV R1, #1
+BL espera_valor
+CMP R0, #0
+BEQ ERROR_MEDIDA
+BL ST_Read
+MOV R4, R1
+MOV R0, #15
+MOV R1, #0
+BL espera_valor
+CMP R0, #0
+BEQ ERROR_MEDIDA
+
+BL ST_Read
+SUB R0, R1, R4
+BL calcula_distancia
+MOV R1, R0
+MOV R0, #1 @true. Medida correcta.
+B FIN_MD
+
+ERROR_MEDIDA:
+MOV R1, #0 @no hay medida. r0 ya esta a 0 (false)
+
+FIN_MD:
+LDMIA SP!, {R4-R5, PC}
+
+calcula_distancia:
+@recibe como parametro el tiempo que ha tardado la senhal de ultrasonidos en llegar al objeto y volver en microsegundos. retorna la distancia en milimetros.
+LDR R1, =0X2BEE
+MUL R0, R1, R0
+LSR R0, R0, #16
+MOV PC, LR

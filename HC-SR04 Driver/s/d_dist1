@@ -1,0 +1,87 @@
+.extern prog_gpio
+.extern valor_terminal
+.extern espera_valor
+.extern ST_Delay
+
+.equ TERMINAL_TRIG, 14 @numero de terminal
+.equ TERMINAL_ECHO, 15 @numero de terminal
+.equ TIME_HIGH, 15 @microsegundos
+
+.globl Ini_dist
+.globl Mide_dist
+
+.data
+BIEN_D: .asciz "valor pin correcto"
+
+.text
+Ini_dist:
+@prepara el dispositivo para empezar a tomar medidas, indicando a cada terminal el modo de comportamiento. No recibe parametros ni retorna.
+SUB SP, SP, #4
+STR LR, [SP]
+MOV R0, #TERMINAL_TRIG
+MOV R1, #1
+BL prog_gpio
+MOV R0, #TERMINAL_ECHO
+MOV R1, #0
+BL prog_gpio
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR
+
+Mide_dist:
+@no recibe parametros, y retorna en r0 un booleano indicando si se ha podido tomar o no la medida.
+STMDB SP!, {R4-R8, LR}
+MOV R0, #8
+MOV R1, #1
+BL valor_terminal
+MOV R0, #8
+MOV R1, #1
+@bl comprueba (depuracion)
+MOV R0, #TIME_HIGH
+BL ST_Delay
+MOV R0, #8
+MOV R1, #0
+BL valor_terminal
+@bl comprueba (depuracion)
+
+MOV R0, #15
+MOV R1, #1
+BL espera_valor
+CMP R0, #0
+BEQ FIN_MD
+MOV R0, #15
+MOV R1, #0
+BL espera_valor
+CMP R0, #0
+BEQ FIN_MD
+MOVNE R0, #1 @true. Medida correcta.
+
+FIN_MD:
+LDMIA SP!, {R4-R8, PC}
+
+comprueba:
+@recibe el numero de terminal a comprobar como parametro (r0). No retorna nada. Funcion de depuracion para ver el valor del terminal en un instante de tiempo.
+STMDB SP!, {R4-R8, LR}
+MOV R4, R0 @No LED
+mov R7, #14
+MOV R8, #1
+LSL R8, R8, R7
+LDR R6, =0xf8200000
+SWI 0X16
+ldr R8, [R6, #0x34]
+SWI 0X7C
+and r8, r8, r7
+cmp r8, #0
+ldrne r0, =BIEN_D
+swine 0x2
+LDMIA SP!, {R4-R8, PC}
+
+
+
+
+
+
+
+
+
+

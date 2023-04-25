@@ -1,0 +1,29 @@
+.extern ST_Init
+.extern Ini_dist
+.extern Mide_dist
+.extern print_integer
+
+.data
+BIEN: .asciz "\nMEDIDA REALIZADA CORRECTAMENTE"
+MAL: .asciz "\nNO SE HA PODIDO REALIZAR LA MEDIDA"
+DIST: .asciz "\nDISTANCIA: "
+MED: .asciz "mm"
+
+.globl _start
+.text
+_start:
+BL ST_Init
+BL Ini_dist
+BL Mide_dist
+CMP R0, #0
+LDREQ R0, =MAL
+LDRNE R0, =BIEN
+SWI 0X02
+LDR R0, =DIST
+SWI 0X02
+MOV R0, R1
+BL print_integer
+LDR R0, =MED
+SWI 0X02
+
+SWI 0X11
