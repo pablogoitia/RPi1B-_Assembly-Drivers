@@ -1,0 +1,153 @@
+.extern prog_gpio
+.extern progResPull_gpio
+.extern Ini_CI
+.extern Enable_CI
+.extern Disable_CI
+.extern Sleep
+.extern WakeUp
+
+.equ TERMINAL_B1, 10 @numero de terminal
+.equ TERMINAL_B2, 9 @numero de terminal
+.equ GPLEV, 0X34
+.equ GPFEN, 0X58
+.equ GPEDS, 0X40
+.equ ESPERA, 10000
+.equ GPEDS0_IRQ, 49
+
+.globl Ini_Boton
+.globl Fin_Boton
+.globl lee_Boton
+
+.text
+Ini_Boton:
+@recibe como parametro el numero del boton a inicializar. No devuelve datos.
+STMDB sp!, {R4, LR}
+CMP R0, #1
+MOVEQ R0, #TERMINAL_B1
+CMP R0, #2
+MOVEQ R0, #TERMINAL_B2
+MOV R4, R0
+MOV R1, #0
+BL prog_gpio
+
+MOV R0, R4
+MOV R1, #0
+BL progResPull_gpio
+
+MOV R0, #GPEDS0_IRQ
+BL Disable_CI
+
+@habilito la deteccion de eventos de flanco descendente
+LDR R2, =DIR_BASE
+LDR R2, [R2]  @LOAD DIR_BASE
+MOV R0, #1
+LSL R0, R0, R4
+SWI 0X16
+LDR R1, [R2, #GPFEN]
+ORR R0, R1, R0
+STR R0, [R2, #GPFEN]
+SWI 0X7C
+
+MOV R0, #GPEDS0_IRQ
+LDR R1, =Int_Boton
+MOV R2, #0
+MOV R3, #0
+MOV R4, #0
+SWI 0X4B        @OS_ClaimDeviceVector
+LDMIA sp!, {R4, PC}
+
+lee_Boton:
+@Recibe como parametro el numero de boton cuya pulsacion se quiere detectar. No retorna nada.
+STMDB sp!, {LR}
+LDR R2, =DIR_BASE
+LDR R2, [R2]  @LOAD DIR_BASE
+CMP R0, #1
+MOVEQ R0, #TERMINAL_B1
+CMP R0, #2
+MOVEQ R0, #TERMINAL_B2
+
+MOV R1, #1
+LSL R1, R1, R0
+SWI 0X16
+STR R1, [R2, #GPEDS]
+SWI 0X7C
+MOV R0, #GPEDS0_IRQ
+BL Enable_CI
+BL Sleep
+MOV R0, #GPEDS0_IRQ
+BL Disable_CI
+LDMIA sp!, {PC}
+
+Int_Boton:
+@Rutina de atencion a la interrupcion.
+STMDB sp!, {R0-R6, LR}
+LDR R4, =DIR_BASE
+LDR R4, [R4]  @LOAD DIR_BASE
+
+MOV R1, #1
+LSL R5, R1, #TERMINAL_B1 @mascara boton 1
+LDR R2, [R4, #GPEDS]
+AND R2, R5, R2
+CMP R2, #0
+BEQ FIN_RTI
+
+MOV R6, #3
+BUCLE_BD:
+CMP R6, #0
+BEQ FIN_BD
+LDR R0, [R4, #GPLEV]
+AND R0, R5, R0
+CMP R0, #0
+SUBNE R6, R6, #1
+MOVEQ R6, #3
+LDR R0, =ESPERA
+BL espera_microsegundos
+B BUCLE_BD
+FIN_BD:
+
+BL WakeUp
+
+FIN_RTI:
+STR R5, [R4, #GPEDS]
+LDMIA sp!, {R0-R6, PC}
+
+espera_microsegundos:
+@Recibe un valor en microsegundos y pierde el tiempo.
+STMDB sp!, {R4-R5, LR}
+MOV R4, R0
+MOV R5, #700 @frecuencia del procesador
+MUL R5, R4, R5
+LSR R4, R4, #1
+FOR_EM:
+CMP R4, #0
+BEQ FIN_FOR_EM
+SUB R4, R4, #1
+B FOR_EM
+FIN_FOR_EM:
+LDMIA sp!, {R4-R5, PC}
+
+Fin_Boton:
+@recibe como parametro el numero del boton que se va a dejar de usar. No retorna resultados.
+STMDB sp!, {R4, LR}
+CMP R0, #1
+MOVEQ R0, #TERMINAL_B1
+CMP R0, #2
+MOVEQ R0, #TERMINAL_B2
+LDR R4, =DIR_BASE
+LDR R4, [R4]  @LOAD DIR_BASE
+MOV R1, #1
+LSL R1, R1, R0
+SWI 0X16
+LDR R0, [R4, #GPFEN]
+BIC R0, R0, R1
+STR R0, [R4, #GPFEN]
+SWI 0X7C
+MOV R0, #GPEDS0_IRQ
+LDR R1, =Int_Boton
+MOV R2, #0
+MOV R3, #0
+MOV R4, #0
+SWI 0X4C        @OS_ReleaseDeviceVector
+MOV R0, #GPEDS0_IRQ
+BL Disable_CI
+LDMIA sp!, {R4, PC}

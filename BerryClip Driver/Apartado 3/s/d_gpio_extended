@@ -1,0 +1,63 @@
+.extern DIR_BASE
+
+.equ GPSET, 0X1C
+.equ GPCLR, 0X28
+.equ GPLEV, 0X34
+.equ NUM_COMPROB, 100000 @comprobaciones
+
+.data
+.align 2
+@DIR_BASE: .space 4
+LEDS: .byte 9, 10, 11, 17, 22, 27, 4, 14
+@numeros de terminal: LEDS, Zumbador, Trig HC-SR04
+
+.globl valor_terminal
+.globl espera_valor
+
+.text
+valor_terminal:
+STMDB SP!, {R4-R8, LR}
+MOV R4, R0 @No LED
+MOV R5, R1 @ACTIVADO/DESACTIVADO
+LDR R7, =LEDS
+SUB R4, R4, #1
+LDRB R7, [R7, R4]
+MOV R8, #1
+LSL R8, R8, R7
+LDR R6, =DIR_BASE
+LDR R6, [R6]  @LOAD DIR_BASE
+CMP R5, #0
+SWI 0X16
+STRNE R8, [R6, #GPSET]
+STREQ R8, [R6, #GPCLR]
+SWI 0X7C
+LDMIA SP!, {R4-R8, PC}
+
+espera_valor:
+@recibe como parametros el valor del terminal y el valor esperado en este. Retorna 0 si no se ha detectado ese valor, y 1 si lo ha detectado.
+STMDB SP!, {R4-R5, LR}
+LDR R4, =NUM_COMPROB
+LDR R5, =DIR_BASE
+LDR R5, [R5]  @LOAD DIR_BASE
+
+BUCLE_EV:
+CMP R4, #0
+BLE FIN_NO_DETECTADO
+
+SWI 0X16
+LDR R2, [R5, #GPLEV]
+SWI 0X7C
+LSR R3, R2, R0
+AND R3, R3, #1
+CMP R3, R1
+MOVEQ R0, #1 @true
+BEQ FIN_DETECTADO
+
+SUB R4, R4, #1
+B BUCLE_EV
+
+FIN_NO_DETECTADO:
+MOV R0, #0 @false
+
+FIN_DETECTADO:
+LDMIA SP!, {R4-R5, PC}

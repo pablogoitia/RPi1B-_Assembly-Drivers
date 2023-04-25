@@ -1,0 +1,66 @@
+.equ DIR_FISICA, 0X2000B200
+.equ EnIRQ1, 0X10
+.equ EnIRQ2, 0X14
+.equ DisIRQ1, 0X1C
+.equ DisIRQ2, 0X20
+
+.data
+.align 2
+DIR_BASE_CI: .space 4
+
+.globl Ini_CI
+.globl Enable_CI
+.globl Disable_CI
+
+.text
+Ini_CI:
+@Obtiene la direccion logica del controlador de interrupciones y la almacena en una variable en memoria. No recibe ni devuelve parametros.
+SUB SP, SP, #4
+STR LR, [SP]
+LDR R1, =DIR_FISICA
+MOV R0, #13
+MOV R2, #0X100
+SWI 0X68
+LDR R0, =DIR_BASE_CI
+STR R3, [R0] @STORE DIR_BASE
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR
+
+Enable_CI:
+@Recibe el numero de linea sobre el que se va a actuar. Permite que se gestionen las peticiones de interrupcion que llegan por la linea indicada.
+SUB SP, SP, #4
+STR LR, [SP]
+LDR R1, =DIR_BASE_CI
+LDR R1, [R1]
+CMP R0, #32
+MOVLT R2, #EnIRQ1
+MOVGE R2, #EnIRQ2
+SUBGE R0, R0, #32
+MOV R3, #1
+LSL R3, R3, R0
+SWI 0X16
+STR R3, [R1, R2]
+SWI 0X7C
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR
+
+Disable_CI:
+@Recibe el numero de linea sobre el que se va a actuar. Impide que se gestionen las peticiones de interrupcion que llegan por la linea indicada.
+SUB SP, SP, #4
+STR LR, [SP]
+LDR R1, =DIR_BASE_CI
+LDR R1, [R1]
+CMP R0, #32
+MOVLT R2, #DisIRQ1
+MOVGE R2, #DisIRQ2
+SUBGE R0, R0, #32
+MOV R3, #1
+LSL R3, R3, R0
+SWI 0X16
+STR R3, [R1, R2]
+SWI 0X7C
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR

@@ -1,0 +1,110 @@
+.extern prog_gpio
+.extern ST_Delay
+.extern progResPull_gpio
+
+.equ TERMINAL_B1, 10 @numero de terminal
+.equ TERMINAL_B2, 9 @numero de terminal
+.equ GPLEV, 0X34
+.equ GPREN, 0X4C
+.equ GPFEN, 0X58
+.equ GPEDS, 0X40
+.equ ESPERA, 10000
+
+.globl Ini_Boton
+.globl lee_Boton
+
+.text
+Ini_Boton:
+@recibe como parametro el numero del boton a inicializar. No devuelve datos.
+STMDB sp!, {R4, LR}
+CMP R0, #1
+MOVEQ R0, #TERMINAL_B1
+CMP R0, #2
+MOVEQ R0, #TERMINAL_B2
+MOV R4, R0
+MOV R1, #0
+BL prog_gpio
+MOV R0, R4
+MOV R1, #0
+BL progResPull_gpio
+
+@habilito la deteccion de eventos de flanco descendente
+LDR R2, =DIR_BASE
+LDR R2, [R2]  @LOAD DIR_BASE
+MOV R0, #1
+LSL R0, R0, R4
+SWI 0X16
+LDR R1, [R2, #GPFEN]
+ORR R0, R1, R0
+STR R0, [R2, #GPFEN]
+SWI 0X7C
+LDMIA sp!, {R4, PC}
+
+lee_Boton:
+@recibe como parametro el numero del boton cuya pulsacion se debe reconocer. Finaliza cuando se ha detectado la pulsacion del boton.
+STMDB SP!, {R4, LR}
+CMP R0, #1
+MOVEQ R0, #TERMINAL_B1
+CMP R0, #2
+MOVEQ R0, #TERMINAL_B2  
+MOV R4, R0
+BL boton_activado
+MOV R0, R4
+BL boton_desactivado
+LDMIA SP!, {R4, PC}
+
+boton_activado:
+@recibe como parametro el numero del terminal del boton. Finaliza cuando se ha detectado un evento de flanco descendiente.
+SUB SP, SP, #4
+STR LR, [SP]
+LDR R3, =DIR_BASE
+LDR R3, [R3]  @LOAD DIR_BASE
+
+MOV R1, #1
+LSL R0, R1, R0
+SWI 0X16
+STR R0, [R3, #GPEDS]
+SWI 0X7C
+
+BUCLE_BA:
+SWI 0X16
+LDR R1, [R3, #GPEDS]
+SWI 0X7C
+AND R2, R1, R0
+CMP R2, #0
+BNE FIN_BA
+B BUCLE_BA
+
+FIN_BA:
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR
+
+boton_desactivado:
+@recibe como parametro el numero del terminal del boton. Finaliza cuando se ha detectado que el boton no esta pulsado. No retorna datos.
+STMDB SP!, {R4-R6, LR}
+LDR R4, =DIR_BASE
+LDR R4, [R4]  @LOAD DIR_BASE
+MOV R6, #3
+MOV R1, #1
+LSL R5, R1, R0
+
+BUCLE_BD:
+CMP R6, #0
+BEQ FIN_BD
+SWI 0X16
+LDR R1, [R4, #GPLEV]
+SWI 0X7C
+AND R0, R5, R1
+CMP R0, #0
+SUBNE R6, R6, #1
+MOVEQ R6, #3
+LDR R0, =ESPERA
+BL ST_Delay
+B BUCLE_BD
+
+FIN_BD:
+SWI 0X16
+STR R5, [R4, #GPEDS]
+SWI 0X7C
+LDMIA SP!, {R4-R6, PC}

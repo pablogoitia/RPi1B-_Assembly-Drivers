@@ -1,0 +1,212 @@
+.extern prog_gpio
+.extern valor_terminal
+.extern espera_valor
+.extern ST_Delay
+.extern ST_Read
+
+.equ NO_DETECT, 25000 @microsegundos
+.equ TERMINAL_TRIG, 14 @numero de terminal
+.equ TERMINAL_ECHO, 15 @numero de terminal
+.equ TIME_HIGH, 15 @microsegundos
+.equ TIME_WHILE, 100000 @microsegundos
+
+.globl Ini_dist
+.globl Mide_dist
+
+.data
+.align 2
+MEDIDAS: .space 8*4
+
+.text
+Ini_dist:
+SUB SP, SP, #4
+STR LR, [SP]
+MOV R0, #TERMINAL_TRIG
+MOV R1, #1
+BL prog_gpio
+MOV R0, #TERMINAL_ECHO
+MOV R1, #0
+BL prog_gpio
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR
+
+Mide_dist:
+STMDB SP!, {R4-R5, LR}
+BL Inicializa_array
+
+WHILE_MD:
+LDR R4, =MEDIDAS
+MOV R0, R4 @puntero array medidas
+BL completa_medidas
+CMP R0, #-1 @si no se tomaron -> error
+BEQ ERROR_MEDIDA_PRECISA
+MOV R5, R0 @copia media futuro retorno
+
+MOV R1, R0 @media
+MOV R0, R4 @puntero array medidas
+LSR R2, R1, #4 @rango dispersion
+BL verifica_medidas
+
+CMP R0, #8 @condicion while
+BGE FIN_TRUE
+BNE WHILE_MD
+
+FIN_TRUE:
+MOV R1, R5 @media
+MOV R0, #1 @true
+B FIN_PRECISION
+ERROR_MEDIDA_PRECISA:
+MOV R0, #0 @media = 0
+MOV R1, #0 @false
+FIN_PRECISION:
+LDMIA SP!, {R4-R5, PC}
+
+coge_medida:
+@funcion renombrada "Mide_dist" del apartado 2/3.
+@no recibe parametros, y retorna en r0 un booleano indicando si se ha podido tomar o no la medida, y en r1 la medida o "0" si no se pudo tomar.
+STMDB SP!, {R4-R5, LR}
+MOV R0, #8
+MOV R1, #1
+BL valor_terminal
+MOV R0, #TIME_HIGH
+BL ST_Delay
+MOV R0, #8
+MOV R1, #0
+BL valor_terminal
+
+MOV R0, #15
+MOV R1, #1
+BL espera_valor
+CMP R0, #0
+BEQ ERROR_MEDIDA
+BL ST_Read
+MOV R4, R1
+MOV R0, #15
+MOV R1, #0
+BL espera_valor
+CMP R0, #0
+BEQ ERROR_MEDIDA
+
+BL ST_Read
+SUB R0, R1, R4
+LDR R1, =NO_DETECT
+CMP R0, R1
+BGE ERROR_MEDIDA
+BL calcula_distancia
+MOV R1, R0
+MOV R0, #1 @true. Medida correcta.
+B FIN_MD
+
+ERROR_MEDIDA:
+MOV R0, #0
+MOV R1, #0 @no hay medida
+
+FIN_MD:
+LDMIA SP!, {R4-R5, PC}
+
+calcula_distancia:
+@recibe como parametro el tiempo que ha tardado la senhal de ultrasonidos en llegar al objeto y volver en microsegundos. retorna la distancia en milimetros.
+LDR R1, =0X2BEE
+MUL R0, R1, R0
+LSR R0, R0, #16
+MOV PC, LR
+
+Inicializa_array:
+SUB SP, SP, #4
+STR LR, [SP]
+LDR R0, =MEDIDAS 
+MOV R1, #-1
+MOV R2, #8
+INICIALIZA_DIST:
+CMP R2, #0
+BEQ FIN_INICIALIZA
+STR R1, [R0]
+ADD R0, R0, #4
+SUB R2, R2, #1
+B INICIALIZA_DIST
+FIN_INICIALIZA:
+LDR LR, [SP]
+ADD SP, SP, #4
+MOV PC, LR
+
+completa_medidas:
+@recibe como parametro una referencia a un array de medidas (r0) (L=8). Por cada posicion del array en la que aparezca "-1" se toma una medida y se reemplaza. Si las medidas son validas, retorna la media de todas las medidas del array (r0). Si 16 mediciones consecutivas son incorrectas, se retorna -1 (r0)
+STMDB SP!, {R4-R8, LR}
+MOV R4, #0 @contador incorrectas
+MOV R5, #8 @index bucle
+MOV R6, R0 @puntero array medidas
+MOV R7, #0 @media
+
+FOR_CM:
+CMP R5, #0
+BLE FIN_FOR_CM
+LDR R8, [R6]
+CMP R8, #-1
+BNE AVANZA_BUCLE
+BL coge_medida
+CMP R0, #1
+BNE ELSE_CM
+MOV R4, #0
+STR R1, [R6]
+MOV R8, R1
+B FIN_IF_CM
+ELSE_CM:
+ADD R4, R4, #1
+CMP R4, #16
+BEQ FIN_ERROR
+B FOR_CM
+FIN_IF_CM:
+AVANZA_BUCLE:
+ADD R7, R7, R8
+ADD R6, R6, #4
+SUB R5, R5, #1
+LDR R0, =TIME_WHILE
+BL ST_Delay
+B FOR_CM
+
+FIN_FOR_CM:
+LSR R0, R7, #3
+B FIN_CM
+
+FIN_ERROR:
+MOV R0, #-1
+
+FIN_CM:
+LDMIA SP!, {R4-R8, PC}
+
+
+verifica_medidas:
+@recibe como parametros una referencia al array de medidas (r0), la media (r1) y la dispersion (r2). Reemplaza todas las medidas del array por -1 cuando esta no se encuentra en nuestro margen de error. Retorna el numero de medidas que verifican la condicion (r0)
+STMDB SP!, {R4-R8, LR}
+MOV R4, R0 @puntero array medidas
+MOV R5, R1 @media
+MOV R6, R2 @dispersion
+MOV R7, #0 @contador medidas validas
+MOV R8, #8 @indice bucle
+
+FOR_VERIF:
+CMP R8, #0
+BLE FIN_FOR_VERIF
+LDR R0, [R4]
+SUB R1, R5, R6
+CMP R0, R1
+BLT NO_VERIFICA
+ADD R1, R5, R6
+CMP R0, R1
+BGT NO_VERIFICA
+ADD R7, R7, #1
+B SIGUE_VERIF
+
+NO_VERIFICA:
+MOV R0, #-1
+STR R0, [R4]
+
+SIGUE_VERIF:
+ADD R4, R4, #4
+SUB R8, R8, #1
+B FOR_VERIF
+
+FIN_FOR_VERIF:
+MOV R0, R7
+LDMIA sp!, {R4-R8, PC}

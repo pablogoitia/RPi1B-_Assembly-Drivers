@@ -1,0 +1,57 @@
+.extern Ini_Boton
+.extern Fin_Boton
+.extern lee_Boton
+.extern Ini_dist
+.extern print_integer
+.extern Ini_dist
+.extern Mide_dist
+.extern ST_Init
+
+.data
+BIEN: .asciz "\nMEDIDA REALIZADA CORRECTAMENTE"
+MAL: .asciz "\nNO SE HA PODIDO TOMAR LA MEDIDA"
+DIST: .asciz "\nDISTANCIA: "
+MED: .asciz "mm"
+
+.globl _start
+
+.text
+_start:
+BL Ini_CI
+BL Ini_dist
+BL ST_Init
+MOV R0, #1
+BL Ini_Boton
+MOV R0, #2
+BL Ini_Boton
+
+WHILE:
+BL lee_Boton
+IF_MN:
+CMP R0, #1
+BNE ELSE_MN
+BL Mide_dist
+CMP R0, #0
+LDREQ R0, =MAL
+LDRNE R0, =BIEN
+SWI 0X02
+LDR R0, =DIST
+SWI 0X02
+MOV R0, R1
+BL print_integer
+LDR R0, =MED
+SWI 0X02
+B FIN_IF_MN
+ELSE_MN:
+CMP R0, #2
+BEQ FIN_WHILE
+FIN_IF_MN:
+B WHILE
+
+FIN_WHILE:
+MOV R0, #1
+BL Fin_Boton
+MOV R0, #2
+BL Fin_Boton
+
+SWI 0X11

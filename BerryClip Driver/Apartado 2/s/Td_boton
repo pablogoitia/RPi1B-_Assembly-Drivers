@@ -1,0 +1,30 @@
+.extern Ini_Boton
+.extern lee_Boton
+
+.data
+CADENA_PRUEBA: .asciz "PROBANDO"
+
+.globl _start
+.text
+_start:
+BL Ini_CI
+MOV R0, #1
+BL Ini_Boton
+LDR R4, =CADENA_PRUEBA
+
+BUCLE:
+LDRB R5, [R4]
+CMP R5, #0X0 @TERMINADOR NULO
+BEQ FIN_BUCLE
+MOV R0, #1
+BL lee_Boton
+MOV R0, R5
+SWI 0X0
+ADD R4, R4, #1
+B BUCLE
+
+FIN_BUCLE:
+MOV R0, #1
+BL Fin_Boton
+
+SWI 0X11
